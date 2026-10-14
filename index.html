@@ -172,6 +172,7 @@
         let lastUpdateId = -1;
         let active = false;
         let updateTimer = null;
+        let updateInFlight = false;
 
         function setStatus(text) {
             document.getElementById('status').innerText = text;
@@ -179,7 +180,7 @@
 
         function stopPolling() {
             if (updateTimer) {
-                clearInterval(updateTimer);
+                clearTimeout(updateTimer);
                 updateTimer = null;
             }
             active = false;
@@ -204,14 +205,12 @@
                 speakKhmer("ប្រព័ន្ធរួចរាល់");
             }, 100);
 
-            if (!updateTimer) {
-                updateTimer = setInterval(update, POLL_INTERVAL_MS);
-            }
             update();
         }
 
         async function update() {
-            if (!active) return;
+            if (!active || updateInFlight) return;
+            updateInFlight = true;
 
             try {
                 const response = await fetch(
@@ -224,7 +223,7 @@
                 if (!data.ok) {
                     if (data.error_code === 409) {
                         stopPolling();
-                        setStatus("❌ Conflict: another bot instance is polling. Close other sessions and reload.");
+                        setStatus("❌ Another tab, device, or server is polling this bot. Stop the other poller, then reload.");
                         console.warn('Telegram 409 conflict: only one getUpdates client may run at a time.');
                     } else {
                         setStatus(`❌ Telegram error ${data.error_code}`);
@@ -267,6 +266,14 @@
             } catch (error) {
                 console.error('Fetch Error', error);
                 setStatus("❌ កំហុសក្នុងការទាញព័ត៌មាន");
+            } finally {
+                updateInFlight = false;
+                if (active && !updateTimer) {
+                    updateTimer = setTimeout(() => {
+                        updateTimer = null;
+                        update();
+                    }, POLL_INTERVAL_MS);
+                }
             }
         }
 
